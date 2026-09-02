@@ -9,7 +9,7 @@
 
 # --- build ------------------------------------------------------------------
 # The -dev variant carries pip and a shell; the runtime variant carries neither.
-FROM cgr.dev/chainguard/python:latest-dev@sha256:385482f1e7c3d6e4f241ac4aec94e0f4970bb3252c6584500299ca0368abac8d AS build
+FROM cgr.dev/chainguard/python:latest-dev@sha256:3472bbd8c7a7fe9254dcccdbd8eefb8edf603d0882aa4ed527f8497957b10f5f AS build
 
 # Chainguard's -dev variants default to the nonroot user, so a write to / is
 # denied. Root for the build only; this stage is discarded.
@@ -40,7 +40,7 @@ RUN pip install --no-cache-dir .
 USER nonroot
 
 # --- runtime ----------------------------------------------------------------
-FROM cgr.dev/chainguard/python:latest@sha256:5adbd0238f98877915c76c096cb53856253f61b364b9c1529b0e237fb66d21bf
+FROM cgr.dev/chainguard/python:latest@sha256:27c8d0e215a516e6d366549d1673baf6c42784277afcc8d904715a73982b9ba4
 
 LABEL org.opencontainers.image.title="prometheus-acinfinity-pro69" \
       org.opencontainers.image.description="Prometheus exporter for the AC Infinity UIS Controller 69 PRO, read from the vendor cloud API" \
