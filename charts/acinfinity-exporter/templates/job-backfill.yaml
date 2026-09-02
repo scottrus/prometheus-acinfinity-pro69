@@ -1,0 +1,83 @@
+{{/*
+The history backfill, as a one-shot Job. Same image, different entrypoint.
+
+SEPARATE FROM THE EXPORTER ON PURPOSE. It materialises tens of thousands of rows
+and holds a write connection to the TSDB. The exporter does neither, and its
+network policy stays ingress-only because of that.
+
+The pod carries app.kubernetes.io/component: backfill, so a network policy on the
+TSDB can admit this Job and NOT the exporter.
+*/}}
+{{- if .Values.backfill.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "acinfinity.fullname" . }}-backfill
+  labels:
+    {{- include "acinfinity.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backfill
+spec:
+  backoffLimit: {{ .Values.backfill.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.backfill.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "acinfinity.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: backfill
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "acinfinity.serviceAccountName" . }}
+      enableServiceLinks: false
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: backfill
+          image: {{ include "acinfinity.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["acinfinity-backfill"]
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ include "acinfinity.secretName" . }}
+          env:
+            - name: ACINFINITY_BACKFILL_SINCE
+              value: {{ required "backfill.since is required when backfill.enabled" .Values.backfill.since | quote }}
+            {{- if .Values.backfill.until }}
+            - name: ACINFINITY_BACKFILL_UNTIL
+              value: {{ .Values.backfill.until | quote }}
+            {{- end }}
+            - name: ACINFINITY_BACKFILL_VM_URL
+              value: {{ required "backfill.victoriaMetricsUrl is required when backfill.enabled" .Values.backfill.victoriaMetricsUrl | quote }}
+            - name: ACINFINITY_BACKFILL_LABELS
+              value: {{ .Values.backfill.labels | toJson | quote }}
+            - name: ACINFINITY_BACKFILL_METRIC_PREFIX
+              value: {{ .Values.metricPrefix | quote }}
+            {{- if .Values.backfill.controller }}
+            - name: ACINFINITY_BACKFILL_CONTROLLER
+              value: {{ .Values.backfill.controller | quote }}
+            {{- end }}
+            - name: ACINFINITY_BACKFILL_LOG_LEVEL
+              value: {{ .Values.logLevel | quote }}
+            {{- if .Values.userAgent }}
+            - name: ACINFINITY_BACKFILL_USER_AGENT
+              value: {{ .Values.userAgent | quote }}
+            {{- end }}
+          resources: {{- toYaml .Values.backfill.resources | nindent 12 }}
+          {{- if .Values.tmpDir.enabled }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          {{- end }}
+      {{- if .Values.tmpDir.enabled }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.tmpDir.sizeLimit }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

@@ -1,0 +1,12 @@
+apiVersion: v2
+name: acinfinity-exporter
+description: Prometheus exporter for the AC Infinity UIS Controller 69 PRO, read from the vendor cloud API, with an optional one-shot history backfill Job
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/scottrus/prometheus-acinfinity-pro69
+sources:
+  - https://github.com/scottrus/prometheus-acinfinity-pro69
+keywords: [prometheus, exporter, ac-infinity, cloudline, monitoring]
+maintainers:
+  - name: Scott Russell

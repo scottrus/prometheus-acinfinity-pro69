@@ -1,0 +1,37 @@
+name: Bug report
+description: A wrong number, a missing metric, or a process that does not run
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste a raw API response. Every device record carries your account
+        email, and the login response carries your password. Paste metric lines
+        from `/metrics` instead.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations: { required: true }
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`acinfinity-exporter --version`, or the image tag."
+    validations: { required: true }
+
+  - type: input
+    id: controller
+    attributes:
+      label: Controller
+      description: "Model, `device_type` and `firmware_version` from `acinfinity_controller_info`."
+    validations: { required: true }
+
+  - type: textarea
+    id: metrics
+    attributes:
+      label: Relevant metric lines
+      render: text

@@ -1,0 +1,31 @@
+{{/*
+Non-secret configuration lives here rather than as inline env on the Deployment,
+so it can be read, diffed and edited as one object. The port names in particular
+are meant to be edited here.
+
+A change still needs a pod restart, because env is fixed at container start. The
+checksum annotation on the Deployment is what makes `helm upgrade` do that.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "acinfinity.fullname" . }}
+  labels: {{- include "acinfinity.labels" . | nindent 4 }}
+data:
+  {{/*
+    EVERY NUMERIC VALUE GOES THROUGH `int64` BEFORE `quote`. Helm parses a values
+    FILE as YAML -> JSON, which yields float64; `--set` yields int64. Without the
+    cast a value from a file can render as "6e+01" and the exporter refuses it.
+  */}}
+  ACINFINITY_EXPORTER_POLL_INTERVAL: {{ .Values.pollInterval | int64 | quote }}
+  ACINFINITY_EXPORTER_API_TIMEOUT: {{ .Values.apiTimeout | int64 | quote }}
+  ACINFINITY_EXPORTER_METRIC_PREFIX: {{ .Values.metricPrefix | quote }}
+  {{/* JSON, not "1=a,2=b": a port name may contain a comma or an equals sign. */}}
+  ACINFINITY_EXPORTER_PORT_NAMES: {{ .Values.portNames | toJson | quote }}
+  ACINFINITY_EXPORTER_LOG_LEVEL: {{ .Values.logLevel | quote }}
+  {{/* LISTEN_PORT, not PORT: a Service named after this release makes Kubernetes
+       inject ACINFINITY_EXPORTER_PORT=tcp://... which would collide. */}}
+  ACINFINITY_EXPORTER_LISTEN_PORT: {{ .Values.service.port | int64 | quote }}
+  {{- if .Values.userAgent }}
+  ACINFINITY_EXPORTER_USER_AGENT: {{ .Values.userAgent | quote }}
+  {{- end }}

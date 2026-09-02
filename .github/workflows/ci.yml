@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A rapid second push should cancel the older run rather than queue behind it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# Every job below runs a `make` target that a contributor can run locally.
+# REQUIRE_ALL=1 makes a missing tool a hard failure, so CI can never silently
+# skip a check that only appears to have run.
+env:
+  REQUIRE_ALL: "1"
+
+jobs:
+  python:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is the floor pyproject claims. 3.14 is what the published image
+        # runs, because the Chainguard base tracks the newest Python.
+        python-version: ["3.11", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: make setup
+
+      - name: Lint (ruff, ruff format)
+        run: make lint
+
+      - name: Tests
+        run: make test
+
+  workflows:
+    name: Workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          curl -sSL -o actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          tar xzf actionlint.tar.gz actionlint
+          sudo install -m 0755 actionlint /usr/local/bin/actionlint
+
+      - name: Lint workflows
+        run: make actionlint
+
+      - name: Every action is SHA-pinned
+        run: make actions-pinned
+
+  helm:
+    name: Helm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.2.3
+
+      - name: Install kubeconform
+        run: |
+          set -euo pipefail
+          curl -sSL -o kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz
+          tar xzf kubeconform.tar.gz kubeconform
+          sudo install -m 0755 kubeconform /usr/local/bin/kubeconform
+
+      - name: Lint, template permutations, required values, schema
+        run: make helm
+
+  docker:
+    name: Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install hadolint
+        run: |
+          set -euo pipefail
+          sudo curl -sSL -o /usr/local/bin/hadolint \
+            https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-x86_64
+          sudo chmod +x /usr/local/bin/hadolint
+
+      # DELIBERATELY UNCACHED. A GitHub layer cache was measured on a sibling
+      # repository with the same build shape, and it doubled the job: the build is
+      # almost entirely a Chainguard base-image pull, and the cache round-trip is
+      # slower than the registry.
+      - name: Lint the Dockerfile, build the image, smoke test it
+        run: make docker
+
+      - name: Install grype
+        id: grype
+        uses: anchore/scan-action/download-grype@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+
+      - name: Put grype on PATH
+        run: dirname "${{ steps.grype.outputs.cmd }}" >> "$GITHUB_PATH"
+
+      - name: Scan the image
+        run: make scan

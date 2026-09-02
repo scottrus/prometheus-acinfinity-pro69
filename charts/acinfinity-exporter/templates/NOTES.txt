@@ -1,0 +1,30 @@
+{{ include "acinfinity.fullname" . }} is serving on port {{ .Values.service.port }}.
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "acinfinity.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  curl localhost:{{ .Values.service.port }}/metrics
+
+The first poll runs at once, then every {{ .Values.pollInterval }}s.
+
+Before the first success there are deliberately NO reading gauges, only these:
+
+  {{ .Values.metricPrefix }}_collection_success             1 means the last attempt worked
+  {{ .Values.metricPrefix }}_last_collection_timestamp_seconds
+{{- if not .Values.portNames }}
+
+NOTE: portNames is empty, so port_name falls back to the vendor name ("Port 1").
+Set it here so a rename in the app cannot move a dashboard.
+{{- end }}
+{{- if not .Values.fullnameOverride }}
+
+NOTE: fullnameOverride is unset. Objects are named {{ include "acinfinity.fullname" . }},
+and that name becomes the `job` label on every series. Set it before the first
+scrape; a later rename orphans all prior history.
+{{- end }}
+{{- if .Values.backfill.enabled }}
+
+The backfill Job {{ include "acinfinity.fullname" . }}-backfill is rendered. Watch it with:
+
+  kubectl -n {{ .Release.Namespace }} logs job/{{ include "acinfinity.fullname" . }}-backfill -f
+
+Then set backfill.enabled=false and upgrade again to remove it.
+{{- end }}

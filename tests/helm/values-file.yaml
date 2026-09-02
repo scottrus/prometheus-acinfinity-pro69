@@ -1,0 +1,31 @@
+# Rendered by `make helm-template` as the values-FILE permutation.
+#
+# THIS FILE EXISTS BECAUSE --set AND -f TAKE DIFFERENT PARSERS. Helm reads a values
+# file as YAML -> JSON, which yields float64 for numbers; `--set` yields int64. A
+# number can therefore render as "6e+01" one way and "60" the other. Real
+# deployments use `-f`, so this permutation is the one that matters.
+fullnameOverride: acinfinity-exporter
+
+acinfinity:
+  existingSecret: acinfinity-exporter
+
+portNames:
+  "1": Closet exhaust T10
+  "1424979258063671880/2": "Spare, port = 2"
+
+pollInterval: 60
+apiTimeout: 30
+metricPrefix: acinfinity
+
+vmServiceScrape:
+  enabled: true
+  interval: 60s
+  scrapeTimeout: 30s
+
+backfill:
+  enabled: true
+  since: "2026-08-01T00:00:00Z"
+  until: "2026-09-02T14:00:00Z"
+  victoriaMetricsUrl: http://vmsingle:8428/api/v1/import/prometheus
+  labels:
+    job: acinfinity-exporter

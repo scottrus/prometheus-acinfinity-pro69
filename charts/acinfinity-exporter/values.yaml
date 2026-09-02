@@ -1,0 +1,134 @@
+acinfinity:
+  # -- Account email. Required unless existingSecret is set.
+  email: ""
+  # -- Account password. Required unless existingSecret is set.
+  #
+  # This credential can WRITE to every controller on the account. Create a second
+  # account and share the controller to it; see SECURITY.md in the repository.
+  password: ""
+  # -- Use a pre-existing Secret instead of rendering one from the two values
+  # above. It must contain exactly these keys: ACINFINITY_EMAIL, ACINFINITY_PASSWORD.
+  existingSecret: ""
+
+# -- Configured port names, rendered into the ConfigMap as JSON. A key is a port
+# number, or "<controller_id>/<port>" when two controllers share a numbering.
+# The name lands on the `port_name` label of acinfinity_port_info, and wins over
+# the vendor default ("Port 1"). A rename in the app then changes nothing here.
+#
+#   portNames:
+#     "1": Closet exhaust T10
+portNames: {}
+
+# -- Metric namespace. Configurable only to avoid collisions between instances.
+metricPrefix: acinfinity
+
+# -- Seconds between vendor polls. This, and only this, sets the vendor call rate;
+# scrapes read process state and never reach the vendor. 60 s matches the cloud's
+# own record rate.
+pollInterval: 60
+
+# -- Seconds per vendor request.
+apiTimeout: 30
+
+# -- User-Agent sent to the vendor. Empty means the exporter's own name and version,
+# which the API accepts.
+userAgent: ""
+
+logLevel: INFO
+
+image:
+  repository: ghcr.io/scottrus/prometheus-acinfinity-pro69
+  tag: ""            # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+# -- One, deliberately. A second replica doubles the vendor calls and emits
+# duplicate series for no gain: each poll re-reads absolute values.
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8000
+  annotations: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  # -- The exporter never calls the Kubernetes API. A token it cannot use is only
+  # ever an asset to an attacker who lands in the pod.
+  automountServiceAccountToken: false
+
+serviceMonitor:
+  enabled: false
+  interval: 60s
+  scrapeTimeout: 30s
+  labels: {}
+
+vmServiceScrape:
+  enabled: false
+  interval: 60s
+  scrapeTimeout: 30s
+  labels: {}
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 48Mi
+  limits:
+    # One JSON document per minute and one small snapshot in memory. A limit is
+    # the backstop for a regression that started to keep history in process.
+    memory: 96Mi
+    cpu: 250m
+
+# -- Writable scratch, because readOnlyRootFilesystem is true. Nothing writes
+# today; the failure mode if something starts to is a CrashLoop.
+tmpDir:
+  enabled: true
+  sizeLimit: 16Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# -- One-shot history backfill, rendered as a Job. Enable it, set the window,
+# upgrade, wait for completion, then disable it and upgrade again.
+#
+# A Job's spec is immutable. To change the window while enabled, disable first
+# (the upgrade deletes the Job), then re-enable with the new values.
+backfill:
+  enabled: false
+  # -- Window start. Unix seconds or ISO 8601; a date with no offset is UTC. Required.
+  since: ""
+  # -- Window end. Empty means now. Pick the exporter's first successful collection,
+  # so imported and scraped samples do not overlap.
+  until: ""
+  # -- The TSDB import endpoint, .../api/v1/import/prometheus. Required.
+  victoriaMetricsUrl: ""
+  # -- Extra labels on every imported sample. Imported samples carry NO job or
+  # instance label unless set here.
+  labels: {}
+  # -- Restrict to one controller by devId or devCode. Empty means every controller.
+  controller: ""
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+      cpu: 500m

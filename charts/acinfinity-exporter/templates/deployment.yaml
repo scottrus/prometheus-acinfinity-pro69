@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "acinfinity.fullname" . }}
+  labels: {{- include "acinfinity.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels: {{- include "acinfinity.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels: {{- include "acinfinity.selectorLabels" . | nindent 8 }}
+      annotations:
+        {{/* Without this a ConfigMap edit leaves the process on the old values. */}}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}{{- toYaml . | nindent 8 }}{{- end }}
+    spec:
+      serviceAccountName: {{ include "acinfinity.serviceAccountName" . }}
+      {{/*
+        MANDATORY. Kubernetes service links inject <SVCNAME>_PORT for every Service
+        in the namespace. A Service named `acinfinity-exporter` injects
+        ACINFINITY_EXPORTER_PORT=tcp://10.x.x.x:8000, which shares a prefix with
+        every setting this exporter reads. The exporter names its own port setting
+        LISTEN_PORT to sidestep the exact collision, and this removes the class.
+      */}}
+      enableServiceLinks: false
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: exporter
+          image: {{ include "acinfinity.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "acinfinity.fullname" . }}
+            - secretRef:
+                name: {{ include "acinfinity.secretName" . }}
+          ports:
+            - name: http-metrics
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          {{/*
+            Both probes hit /health, a REAL route that 404s unknown paths. Neither
+            asserts collection success: a vendor outage must surface as
+            acinfinity_collection_success 0 on a scrape, not as a restart loop.
+          */}}
+          livenessProbe:
+            httpGet: { path: /health, port: http-metrics }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet: { path: /health, port: http-metrics }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.tmpDir.enabled }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          {{- end }}
+      {{- if .Values.tmpDir.enabled }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.tmpDir.sizeLimit }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}

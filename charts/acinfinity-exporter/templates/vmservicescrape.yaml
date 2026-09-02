@@ -1,0 +1,16 @@
+{{- if .Values.vmServiceScrape.enabled }}
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: {{ include "acinfinity.fullname" . }}
+  labels:
+    {{- include "acinfinity.labels" . | nindent 4 }}
+    {{- with .Values.vmServiceScrape.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+spec:
+  selector:
+    matchLabels: {{- include "acinfinity.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http-metrics
+      interval: {{ .Values.vmServiceScrape.interval }}
+      scrapeTimeout: {{ .Values.vmServiceScrape.scrapeTimeout }}
+{{- end }}

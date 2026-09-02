@@ -1,0 +1,183 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+# Default to read-only and grant per job.
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  CHART_NAME: acinfinity-exporter
+
+jobs:
+  # Gate: the tagged commit must be one that already passed full CI on main.
+  # Re-running lint and test here would duplicate one of four CI jobs and skip
+  # the other three. Assert the invariant instead.
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Tagged commit must be on main
+        run: |
+          set -euo pipefail
+          git fetch -q origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA is not an ancestor of origin/main."
+            exit 1
+          fi
+          echo "$GITHUB_SHA is on main"
+
+      - name: CI must have succeeded on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          count=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&status=success" \
+            --jq '.total_count')
+          if [ "$count" -lt 1 ]; then
+            echo "::error::No successful CI run found for ${GITHUB_SHA}. Wait for CI, then re-tag."
+            exit 1
+          fi
+          echo "found $count successful CI run(s) for this commit"
+
+  image:
+    name: Image
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check the tag matches the packaged version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/acinfinity_exporter/__init__.py)"
+          chart="$(sed -n 's/^appVersion: "\(.*\)"/\1/p' charts/acinfinity-exporter/Chart.yaml)"
+          echo "tag=$tag package=$pkg chart_appVersion=$chart"
+          [ "$tag" = "$pkg" ]   || { echo "tag != __version__"; exit 1; }
+          [ "$tag" = "$chart" ] || { echo "tag != chart appVersion"; exit 1; }
+
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: mode=max
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  chart:
+    name: Chart
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.2.3
+
+      - name: Package and push to GHCR as an OCI artifact
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | helm registry login ${{ env.REGISTRY }} \
+                --username ${{ github.actor }} --password-stdin
+          helm package charts/${{ env.CHART_NAME }} --destination /tmp/chart
+          # Repository owner must be lowercase for an OCI reference.
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          helm push /tmp/chart/${{ env.CHART_NAME }}-*.tgz \
+            "oci://${{ env.REGISTRY }}/${owner}/charts"
+
+  release:
+    name: GitHub release
+    needs: [image, chart]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Create the release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          generate_release_notes: true
+          body: |
+            ## Container image
+
+            ```
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ```
+
+            Digest: `${{ needs.image.outputs.digest }}`
+
+            ## Helm chart
+
+            ```bash
+            helm install acinfinity-exporter \
+              oci://ghcr.io/${{ github.repository_owner }}/charts/acinfinity-exporter \
+              --version ${{ github.ref_name }} \
+              --namespace monitoring \
+              --set fullnameOverride=acinfinity-exporter \
+              --set acinfinity.existingSecret=acinfinity-exporter \
+              --set-json 'portNames={"1": "Closet exhaust T10"}' \
+              --set vmServiceScrape.enabled=true
+            ```
+
+            > The credential can write to every controller on the account. Create a
+            > second AC Infinity account, share the controller to it, and give the
+            > exporter that account. See SECURITY.md.

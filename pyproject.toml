@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "prometheus-acinfinity-pro69"
+dynamic = ["version"]
+description = "Prometheus exporter for the AC Infinity UIS Controller 69 PRO, read from the vendor cloud API, with a one-shot history backfill into VictoriaMetrics"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+authors = [{ name = "Scott Russell" }]
+keywords = ["prometheus", "exporter", "ac-infinity", "cloudline", "uis", "monitoring", "victoriametrics"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: System :: Monitoring",
+]
+# One runtime dependency, on purpose. The vendor API is four form POSTs over
+# HTTPS, and the standard library handles them. Every extra package is CVE
+# surface inside a runtime image that ships nothing else.
+dependencies = [
+  "prometheus-client>=0.20,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "ruff>=0.6",
+]
+
+[project.scripts]
+acinfinity-exporter = "acinfinity_exporter.__main__:main"
+acinfinity-backfill = "acinfinity_exporter.backfill:main"
+
+[project.urls]
+Homepage = "https://github.com/scottrus/prometheus-acinfinity-pro69"
+Issues = "https://github.com/scottrus/prometheus-acinfinity-pro69/issues"
+
+[tool.hatch.version]
+path = "src/acinfinity_exporter/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/acinfinity_exporter"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
