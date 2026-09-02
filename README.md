@@ -349,7 +349,9 @@ make check    # lint, tests, workflows, helm, docker
 ```
 
 Every CI check is a `make` target, and the workflow calls the same targets. See
-[CONTRIBUTING.md](CONTRIBUTING.md). The architecture, and the reasons behind each decision, is
+[CONTRIBUTING.md](CONTRIBUTING.md). **The git tag is the only version declaration**: a
+local tree reports a dev version such as `0.1.0.dev3+g9e3b566`, and a release build gets
+the tag through `SETUPTOOLS_SCM_PRETEND_VERSION`. The architecture, and the reasons behind each decision, is
 in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 To re-capture the fixtures after a firmware or API change:

@@ -1,3 +1,10 @@
 """Prometheus exporter for the AC Infinity UIS Controller 69 PRO."""
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    # Resolved from installed package metadata, which setuptools-scm derives
+    # from the git tag at build time. No version literal is committed anywhere.
+    __version__ = version("prometheus-acinfinity-pro69")
+except PackageNotFoundError:  # pragma: no cover - running from a source tree
+    __version__ = "0.0.0+unknown"

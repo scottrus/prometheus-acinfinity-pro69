@@ -15,9 +15,9 @@ PIP     ?= $(VENV)/bin/pip
 CHART   ?= charts/acinfinity-exporter
 IMAGE   ?= prometheus-acinfinity-pro69:dev
 
-# Read from the package rather than duplicated here, so the smoke test asserts the
-# image really carries the version this working tree claims.
-VERSION := $(shell sed -n 's/^__version__ = "\(.*\)"/\1/p' src/acinfinity_exporter/__init__.py)
+# Read from the INSTALLED package: setuptools-scm derives it from the git tag, and
+# no version literal exists in the tree to scrape. Empty until `make setup` has run.
+VERSION = $(shell $(PY) -c 'import acinfinity_exporter; print(acinfinity_exporter.__version__)' 2>/dev/null)
 
 # Values every `helm template` invocation needs to satisfy the chart's own guards.
 HELM_MIN := --set acinfinity.email=user@example.com --set acinfinity.password=secret
@@ -156,10 +156,15 @@ docker-lint:
 		echo "==> hadolint"; hadolint --failure-threshold warning Dockerfile; \
 	fi
 
+# The build context carries no .git, so the version is passed in. It is the
+# installed package's version, which is what the smoke test then checks for.
 .PHONY: docker-build
 docker-build:
 	@if ! command -v docker >/dev/null 2>&1; then $(call missing,docker,docker build); else \
-		set -e; echo "==> docker build"; docker build $(DOCKER_BUILD_ARGS) -t $(IMAGE) .; \
+		set -e; echo "==> docker build"; \
+		[ -n "$(VERSION)" ] || { echo "FAIL: no installed package; run 'make setup' first"; exit 1; }; \
+		docker build --build-arg SETUPTOOLS_SCM_PRETEND_VERSION="$(VERSION)" \
+			$(DOCKER_BUILD_ARGS) -t $(IMAGE) .; \
 	fi
 
 .PHONY: docker-smoke
@@ -168,9 +173,9 @@ docker-smoke:
 		set -e; echo "==> image smoke test"; \
 		docker image inspect $(IMAGE) >/dev/null \
 			|| { echo "FAIL: $(IMAGE) not built; run 'make docker-build' first"; exit 1; }; \
-		docker run --rm $(IMAGE) --version | grep -q "$(VERSION)"; \
+		docker run --rm $(IMAGE) --version | grep -qF "$(VERSION)"; \
 		echo "    reports version $(VERSION)"; \
-		docker run --rm --entrypoint acinfinity-backfill $(IMAGE) --version | grep -q "$(VERSION)"; \
+		docker run --rm --entrypoint acinfinity-backfill $(IMAGE) --version | grep -qF "$(VERSION)"; \
 		echo "    backfill entrypoint is present"; \
 		docker run --rm --read-only --tmpfs /tmp $(IMAGE) --version >/dev/null; \
 		echo "    starts with a READ-ONLY rootfs (+ tmpfs /tmp), as the chart deploys it"; \

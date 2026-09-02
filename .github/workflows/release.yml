@@ -67,15 +67,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Check the tag matches the packaged version
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME#v}"
-          pkg="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/acinfinity_exporter/__init__.py)"
-          chart="$(sed -n 's/^appVersion: "\(.*\)"/\1/p' charts/acinfinity-exporter/Chart.yaml)"
-          echo "tag=$tag package=$pkg chart_appVersion=$chart"
-          [ "$tag" = "$pkg" ]   || { echo "tag != __version__"; exit 1; }
-          [ "$tag" = "$chart" ] || { echo "tag != chart appVersion"; exit 1; }
+      # No version comparison here. Nothing in the tree declares a version:
+      # setuptools-scm derives the package version from this tag, and the chart's
+      # version and appVersion are injected at package time. There is no second
+      # copy that could disagree with the tag.
+      - id: version
+        name: Version from the tag
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
@@ -107,6 +105,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
           provenance: mode=max
+          build-args: |
+            SETUPTOOLS_SCM_PRETEND_VERSION=${{ steps.version.outputs.version }}
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -129,13 +129,18 @@ jobs:
         with:
           version: v4.2.3
 
+      # --version and --app-version keep version literals OUT of the repository.
+      # Chart.yaml carries 0.0.0 placeholders; the tag is the single declaration.
       - name: Package and push to GHCR as an OCI artifact
         run: |
           set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | helm registry login ${{ env.REGISTRY }} \
                 --username ${{ github.actor }} --password-stdin
-          helm package charts/${{ env.CHART_NAME }} --destination /tmp/chart
+          helm package charts/${{ env.CHART_NAME }} \
+            --version "$version" --app-version "$version" \
+            --destination /tmp/chart
           # Repository owner must be lowercase for an OCI reference.
           owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
           helm push /tmp/chart/${{ env.CHART_NAME }}-*.tgz \

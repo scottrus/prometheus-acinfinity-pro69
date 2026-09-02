@@ -40,6 +40,10 @@ reference; see the README for the ten findings that shaped it.
   the Secret, `portNames` rendered into the ConfigMap, and an optional backfill Job.
 - **Fixtures captured live on 2026-09-02** from a 69 PRO on firmware 3.2.56, redacted
   by `scripts/capture-fixtures.py`.
+- **The git tag is the only version declaration.** setuptools-scm derives the package
+  version, and the release workflow injects the chart's `version` and `appVersion` at
+  package time. `Chart.yaml` carries `0.0.0` placeholders. Same pattern as
+  `ecobee-runtime-importer`.
 
 ### Deliberately absent
 

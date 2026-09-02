@@ -1,9 +1,13 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=77", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "prometheus-acinfinity-pro69"
+# Derived from the git tag by setuptools-scm and never committed, so no commit
+# has to predict the next release number. A local tree gets a dev version such
+# as 0.1.0.dev3+g9e3b566; the release workflow passes the tag in through
+# SETUPTOOLS_SCM_PRETEND_VERSION. Same pattern as ecobee-runtime-importer.
 dynamic = ["version"]
 description = "Prometheus exporter for the AC Infinity UIS Controller 69 PRO, read from the vendor cloud API, with a one-shot history backfill into VictoriaMetrics"
 readme = "README.md"
@@ -14,7 +18,6 @@ keywords = ["prometheus", "exporter", "ac-infinity", "cloudline", "uis", "monito
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: System Administrators",
-  "License :: OSI Approved :: Apache Software License",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
@@ -42,11 +45,10 @@ acinfinity-backfill = "acinfinity_exporter.backfill:main"
 Homepage = "https://github.com/scottrus/prometheus-acinfinity-pro69"
 Issues = "https://github.com/scottrus/prometheus-acinfinity-pro69/issues"
 
-[tool.hatch.version]
-path = "src/acinfinity_exporter/__init__.py"
+[tool.setuptools_scm]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/acinfinity_exporter"]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
