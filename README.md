@@ -51,12 +51,16 @@ weigh it, rather than discover it from the commit history.
 
 - **The session-expiry path has only run against a fake transport.** The API reports an expired
   session as HTTP 200 with a non-200 body code. The client re-logs-in once and retries. That
-  logic is tested; a real expiry has not yet been observed through it.
+  logic is tested; a real expiry has not yet been observed through it. It could not be forced
+  either: on 2026-09-02 a fresh login for the same account from a second client did **not**
+  invalidate the running exporter's session, so the vendor allows concurrent sessions, and a
+  session also survived a seven-minute network outage without a re-login.
 - **One controller, one port in use.** Multiple controllers, external sensor probes, and the
   newer AI+ controller family (`newFrameworkDevice: true`) are handled generically and are
   untested. The `sensors[]` array is not decoded at all.
-- **The backfill has not yet written to a live VictoriaMetrics.** Its decode and its paging are
-  tested against a captured page; the write path has run in `--dry-run` only.
+- **The backfill has written to a live VictoriaMetrics once**, on 2026-09-02: one controller, a
+  one-day window, 1,429 rows in, 1,429 read back. Wider windows and more than one controller
+  are handled generically and remain unexercised.
 
 Read the source before you trust it. It is short and commented at the points where a reader
 would otherwise ask why.

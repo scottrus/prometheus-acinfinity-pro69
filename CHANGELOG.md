@@ -15,6 +15,12 @@ project intends to take.
 
 ## [Unreleased]
 
+### Changed
+
+- README: the session-expiry path still cannot be observed live, because the vendor allows
+  concurrent sessions and a session survives a network outage; the backfill has now run once
+  against a live VictoriaMetrics.
+
 ## [0.1.0] - 2026-09-02
 
 First release. A fresh implementation, with `LukeEvansTech/acinfinity-exporter` as the
